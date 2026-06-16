@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 
+const repoRoutes = require("./routes/repoRoutes");
+
 const app = express();
 
 // Middleware
@@ -11,5 +13,8 @@ app.use(express.json());
 app.get("/", (req, res) => {
   res.send("CodeLens AI Backend Running 🚀");
 });
+
+// API Routes
+app.use("/api/repo", repoRoutes);
 
 module.exports = app;
