@@ -1,16 +1,29 @@
 const axios = require("axios");
 
+// GET /api/repo/:owner/:repo
 const getRepository = async (req, res) => {
   try {
     const { owner, repo } = req.params;
 
-
+    // Fetch repository data
     const response = await axios.get(
       `https://api.github.com/repos/${owner}/${repo}`
     );
 
     const repoData = response.data;
-    
+
+    // Fetch README
+    const readmeResponse = await axios.get(
+      `https://api.github.com/repos/${owner}/${repo}/readme`,
+      {
+        headers: {
+          Accept: "application/vnd.github.v3.raw",
+        },
+      }
+    );
+
+    const readmeContent = readmeResponse.data;
+
     res.status(200).json({
       name: repoData.name,
       owner: repoData.owner.login,
@@ -19,7 +32,9 @@ const getRepository = async (req, res) => {
       forks: repoData.forks_count,
       language: repoData.language,
       url: repoData.html_url,
+      readme: readmeContent,
     });
+
   } catch (error) {
     res.status(500).json({
       message: "Failed to fetch repository",
@@ -27,6 +42,8 @@ const getRepository = async (req, res) => {
     });
   }
 };
+
+// POST /api/repo/analyze
 const analyzeRepository = async (req, res) => {
   try {
     const { repoUrl } = req.body;
@@ -51,6 +68,18 @@ const analyzeRepository = async (req, res) => {
 
     const repoData = response.data;
 
+    // Fetch README
+    const readmeResponse = await axios.get(
+      `https://api.github.com/repos/${owner}/${repo}/readme`,
+      {
+        headers: {
+          Accept: "application/vnd.github.v3.raw",
+        },
+      }
+    );
+
+    const readmeContent = readmeResponse.data;
+
     res.status(200).json({
       name: repoData.name,
       owner: repoData.owner.login,
@@ -59,7 +88,9 @@ const analyzeRepository = async (req, res) => {
       forks: repoData.forks_count,
       language: repoData.language,
       url: repoData.html_url,
+      readme: readmeContent,
     });
+
   } catch (error) {
     res.status(500).json({
       message: "Failed to analyze repository",
@@ -67,7 +98,8 @@ const analyzeRepository = async (req, res) => {
     });
   }
 };
+
 module.exports = {
   getRepository,
-  analyzeRepository
+  analyzeRepository,
 };
