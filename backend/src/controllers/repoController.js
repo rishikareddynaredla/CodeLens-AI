@@ -1,5 +1,5 @@
 const axios = require("axios");
-
+const { summarizeReadme } = require("../services/aiService");
 // GET /api/repo/:owner/:repo
 const getRepository = async (req, res) => {
   try {
@@ -23,6 +23,7 @@ const getRepository = async (req, res) => {
     );
 
     const readmeContent = readmeResponse.data;
+    const summary = await summarizeReadme(readmeContent);
 
     res.status(200).json({
       name: repoData.name,
@@ -32,7 +33,8 @@ const getRepository = async (req, res) => {
       forks: repoData.forks_count,
       language: repoData.language,
       url: repoData.html_url,
-      readme: readmeContent,
+      summary,
+      //readme: readmeContent,
     });
 
   } catch (error) {
@@ -79,6 +81,7 @@ const analyzeRepository = async (req, res) => {
     );
 
     const readmeContent = readmeResponse.data;
+    const summary = await summarizeReadme(readmeContent);
 
     res.status(200).json({
       name: repoData.name,
@@ -88,7 +91,8 @@ const analyzeRepository = async (req, res) => {
       forks: repoData.forks_count,
       language: repoData.language,
       url: repoData.html_url,
-      readme: readmeContent,
+      summary,
+      //readme: readmeContent,
     });
 
   } catch (error) {
