@@ -85,6 +85,43 @@ Keep explanation concise.
     return "Failed to explain architecture";
   }
 };
+const identifyImportantFiles = async (files) => {
+  try {
+    const response = await client.chat.completions.create({
+      model: "deepseek/deepseek-chat",
+
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a senior software architect helping developers understand unfamiliar repositories.",
+        },
+        {
+          role: "user",
+          content: `
+Repository files:
+
+${files.join(", ")}
+
+Identify the 5 most important files a developer should read first to understand this repository.
+
+Return only the file names as a simple list.
+          `,
+        },
+      ],
+
+      max_tokens: 200,
+    });
+
+    return response.choices[0].message.content;
+
+  } catch (error) {
+    console.error(error);
+
+    return "Failed to identify important files";
+  }
+};
+
 const answerQuestion = async (
   knowledgeBase,
   question
@@ -128,5 +165,6 @@ ${question}
 module.exports = {
   summarizeReadme,
   explainArchitecture,
+  identifyImportantFiles,
   answerQuestion,
 };
