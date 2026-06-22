@@ -8,9 +8,12 @@ const {
   summarizeReadme,
   explainArchitecture,
   identifyImportantFiles,
+  summarizeFile,
   answerQuestion,
 } = require("../services/aiService");
-const { getRepoContents } = require("../services/githubService");
+const { getRepoContents,
+  getFileContent,
+ } = require("../services/githubService");
 // GET /api/repo/:owner/:repo
 const getRepository = async (req, res) => {
   try {
@@ -87,8 +90,39 @@ const analyzeRepository = async (req, res) => {
   const files = contents
   .filter((item) => item.type === "file")
   .map((item) => item.name);
+  console.log("FILES FROM GITHUB:");
+  console.log(files);
 
   const importantFiles = await identifyImportantFiles(files);
+  const fileSummaries = [];
+
+console.log("Important Files:");
+console.log(importantFiles);
+
+for (const file of importantFiles) {
+  try {
+    console.log("Trying to fetch:", file);
+    const fileContent = await getFileContent(
+      owner,
+      repo,
+      file
+    );
+
+    const summary = await summarizeFile(
+      file,
+      fileContent
+    );
+
+    fileSummaries.push({
+      file,
+      summary,
+    });
+
+  } catch (error) {
+    console.log(`Skipping ${file}`);
+    console.log(error.message);
+  }
+}
 
     const architecture = await explainArchitecture(folders);
 
@@ -105,18 +139,28 @@ const analyzeRepository = async (req, res) => {
     const readmeContent = readmeResponse.data;
     const summary = await summarizeReadme(readmeContent);
     const knowledgeBase = `
-      SUMMARY:
-      ${summary}
+    SUMMARY:
+    ${summary}
 
-      ARCHITECTURE:
-      ${architecture}
+    ARCHITECTURE:
+    ${architecture}
 
-      FOLDERS:
-      ${folders.join(", ")}
+    FOLDERS:
+    ${folders.join(", ")}
 
-      README:
-      ${readmeContent}
-      `;
+    FILE SUMMARIES:
+    ${fileSummaries
+      .map(
+        (file) => `
+    ${file.file}:
+    ${file.summary}
+    `
+      )
+      .join("\n")}
+
+    README:
+    ${readmeContent}
+    `;
     setRepositoryKnowledge(knowledgeBase);
     console.log("Repository knowledge saved");
     console.log("Knowledge size:", knowledgeBase.length);
@@ -133,6 +177,7 @@ const analyzeRepository = async (req, res) => {
     files,
     importantFiles,
     architecture,
+    fileSummaries
 });
 
   } catch (error) {

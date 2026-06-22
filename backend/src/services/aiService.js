@@ -103,9 +103,27 @@ Repository files:
 
 ${files.join(", ")}
 
-Identify the 5 most important files a developer should read first to understand this repository.
+Identify the 3 most important files a developer should read first to understand this repository.
 
-Return only the file names as a simple list.
+Return ONLY a valid JSON array.
+
+IMPORTANT:
+Use the exact file names provided.
+Do not change capitalization.
+Do not rename files.
+Do not modify file names.
+
+Example:
+
+[
+  "package.json",
+  "index.js",s
+  "README.md"
+]
+
+Do not include explanations.
+Do not include numbering.
+Do not include markdown.
           `,
         },
       ],
@@ -113,12 +131,66 @@ Return only the file names as a simple list.
       max_tokens: 200,
     });
 
-    return response.choices[0].message.content;
+    const content =
+      response.choices[0].message.content;
+
+    const cleanedContent = content
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
+
+    return JSON.parse(cleanedContent);
 
   } catch (error) {
     console.error(error);
 
     return "Failed to identify important files";
+  }
+};
+  const summarizeFile = async (
+  fileName,
+  fileContent
+) => {
+  try {
+    const response =
+      await client.chat.completions.create({
+        model: "deepseek/deepseek-chat",
+
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a senior software engineer explaining code files to beginners.",
+          },
+          {
+            role: "user",
+            content: `
+File Name:
+${fileName}
+
+File Content:
+${JSON.stringify(fileContent)}
+
+Explain:
+
+1. What this file does
+2. Why it is important
+3. What a beginner should understand from it
+
+Keep answer under 100 words.
+            `,
+          },
+        ],
+
+        max_tokens: 200,
+      });
+
+    return response.choices[0].message.content;
+
+  } catch (error) {
+    console.error(error);
+
+    return "Failed to summarize file";
   }
 };
 
@@ -167,4 +239,5 @@ module.exports = {
   explainArchitecture,
   identifyImportantFiles,
   answerQuestion,
+  summarizeFile,
 };
