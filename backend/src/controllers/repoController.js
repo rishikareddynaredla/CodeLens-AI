@@ -352,8 +352,42 @@ const askRepository = async (req, res) => {
     });
   }
 };
+// GET /api/repo/:owner/:repo/file/{*filePath}
+// Serves raw file content for the Code Viewer. The named splat captures the
+// full nested path (e.g. "src/services/githubService.js") via req.params.filePath.
+const getFileContentByPath = async (req, res) => {
+  try {
+    const { owner, repo } = req.params;
+    const filePath = Array.isArray(req.params.filePath)
+      ? req.params.filePath.join("/")
+      : req.params.filePath;
+
+    if (!filePath || !filePath.trim()) {
+      return res.status(400).json({
+        message: "File path is required",
+      });
+    }
+
+    const content = await getFileContent(owner, repo, filePath);
+    res.status(200).json({ content });
+  } catch (error) {
+    const status =
+      error.status === 404 || (error.response && error.response.status === 404)
+        ? 404
+        : 500;
+    res.status(status).json({
+      message:
+        status === 404
+          ? "File not found in the specified repository"
+          : "Failed to fetch file content",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   getRepository,
   analyzeRepository,
   askRepository,
+  getFileContentByPath,
 };

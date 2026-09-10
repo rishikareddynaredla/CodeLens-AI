@@ -70,9 +70,13 @@ const getRepoTree = async (owner, repo, branch) => {
 
     return response.data;
   } catch (error) {
-    throw new Error(
+    const err = new Error(
       `Failed to fetch file: ${filePath}`
     );
+    // Preserve the GitHub HTTP status (e.g. 404) so callers can map it to
+    // a proper client error instead of always reporting a server failure.
+    if (error.response) err.status = error.response.status;
+    throw err;
   }
 };
 module.exports = {

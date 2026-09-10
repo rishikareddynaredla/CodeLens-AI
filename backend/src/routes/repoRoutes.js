@@ -5,14 +5,14 @@ const {
   getRepository,
   analyzeRepository,
   askRepository,
+  getFileContentByPath,
 } = require("../controllers/repoController");
 
-// Existing route
+// Existing routes
 router.get("/:owner/:repo", getRepository);
+router.get("/:owner/:repo/file/{*filePath}", getFileContentByPath);
 
-// New analyze route
 router.post("/analyze", analyzeRepository);
-
 router.post("/ask", askRepository);
 
 module.exports = router;

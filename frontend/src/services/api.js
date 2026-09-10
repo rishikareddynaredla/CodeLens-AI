@@ -43,6 +43,17 @@ export const updateSettings = async (payload) => {
   }
 };
 
+export const getFileContents = async (owner, repo, filePath) => {
+  try {
+    const response = await api.get(
+      `/repo/${owner}/${repo}/file/${encodeURIComponent(filePath)}`
+    );
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Failed to fetch file contents');
+  }
+};
+
 export const clearSessionData = async () => {
   try {
     const response = await api.post('/settings/clear');
