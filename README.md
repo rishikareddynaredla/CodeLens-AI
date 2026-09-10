@@ -23,24 +23,27 @@ CodeLens AI aims to solve this by providing:
 
 ## 🛠 Current Features
 
-### ✅ GitHub Repository Fetch API
+### ✅ GitHub Repository Fetch & Analysis API
 
-Fetch real-time repository metadata using the GitHub API.
+Fetch real-time repository metadata, full structure, dependencies, and AI-generated insights.
 
 ### Supported Information
 
-* Repository name
-* Owner
-* Description
-* Stars
-* Forks
-* Primary language
-* Repository URL
+* Repository name, owner, description, stars, forks, primary language, URL
+* Last updated timestamp and repository topics
+* README AI summary
+* Repository structure (full recursive file tree)
+* AI-identified important files with per-file summaries
+* AI architecture explanation
+* Real dependency analysis (package.json, requirements.txt, go.mod, Cargo.toml, Gemfile, Pipfile, pyproject.toml, composer.json)
+* Interactive Q&A chat against the analyzed repository
 
-### Example API Endpoint
+### Example API Endpoints
 
 ```http
-GET /api/repo/vercel/next.js
+GET  /api/repo/vercel/next.js
+POST /api/repo/analyze   { "repoUrl": "https://github.com/vercel/next.js" }
+POST /api/repo/ask       { "question": "How does routing work?" }
 ```
 
 ### Example Response
@@ -53,7 +56,9 @@ GET /api/repo/vercel/next.js
   "stars": 140065,
   "forks": 31227,
   "language": "JavaScript",
-  "url": "https://github.com/vercel/next.js"
+  "url": "https://github.com/vercel/next.js",
+  "updatedAt": "2026-09-09T11:21:33Z",
+  "topics": ["react", "nextjs"]
 }
 ```
 
@@ -64,22 +69,22 @@ GET /api/repo/vercel/next.js
 ```text
 CodeLens-AI/
 │
-├── frontend/        # React frontend (planned)
+├── frontend/        # React (Vite + Tailwind) dashboard
+│   └── src/
+│       ├── context/   # Analysis state
+│       ├── pages/
+│       │   ├── LandingPage.jsx
+│       │   └── Dashboard/   # Overview, Architecture, Structure, Dependencies, FileSummaries, Chat, Onboarding
+│       └── services/api.js
 ├── backend/         # Express backend
-│   ├── src/
-│   │   ├── controllers/
-│   │   ├── routes/
-│   │   ├── services/
-│   │   ├── utils/
-│   │   ├── app.js
-│   │   └── server.js
-│
-├── docs/            # Project documentation
-├── assets/          # Static assets
-│
-├── .env.example
-├── .gitignore
-└── README.md
+│   └── src/
+│       ├── controllers/
+│       ├── routes/
+│       ├── services/   # githubService, aiService, dependencyService
+│       ├── store/      # in-memory knowledge base
+│       ├── app.js
+│       └── server.js
+└── .env.example     # PORT, OPENROUTER_API_KEY, GITHUB_TOKEN
 ```
 
 ---
@@ -120,17 +125,20 @@ CodeLens-AI/
 * Route & controller structure
 * GitHub API integration
 * Dynamic repository fetching
+* AI README summarization
+* Repository structure analysis
+* AI important-file discovery + file summaries
+* AI architecture explanation
+* Dependency analysis
+* Interactive repository Q&A
+* Full frontend dashboard (Overview, Architecture, Structure, Dependencies, Files, Chat, Onboarding)
 
 ### Upcoming Features
 
-* GitHub URL parser
-* README fetcher
-* Repository structure parser
-* AI-powered repository explanation
 * RAG-based semantic code search
-* Dependency analysis
 * Repository health scoring
-* Architecture visualization
+* Dependency caching / faster analysis
+* User auth & per-user rate limiting
 
 ---
 
@@ -148,35 +156,28 @@ Environment variables are excluded from Git tracking using:
 
 ## 🧪 Run Locally
 
-Clone the project:
-
-```bash
-git clone <your-repo-url>
-```
-
-Navigate to backend:
+Backend:
 
 ```bash
 cd backend
-```
-
-Install dependencies:
-
-```bash
 npm install
+npm run dev        # -> http://localhost:5000
 ```
 
-Start development server:
+Frontend:
 
 ```bash
-npm run dev
+cd frontend
+npm install
+npm run dev        # -> http://localhost:5173
 ```
 
-Server runs at:
+### Environment
 
-```text
-http://localhost:5000
-```
+Create `backend/.env` (see `.env.example`):
+
+* `OPENROUTER_API_KEY` — required, for AI summaries & Q&A (https://openrouter.ai/keys)
+* `GITHUB_TOKEN` — optional but recommended, raises GitHub rate limit to 5,000/hr (https://github.com/settings/tokens)
 
 ---
 

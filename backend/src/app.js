@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 
 const repoRoutes = require("./routes/repoRoutes");
+const settingsRoutes = require("./routes/settingsRoutes");
 
 const app = express();
 
@@ -16,5 +17,6 @@ app.get("/", (req, res) => {
 
 // API Routes
 app.use("/api/repo", repoRoutes);
+app.use("/api/settings", settingsRoutes);
 
 module.exports = app;

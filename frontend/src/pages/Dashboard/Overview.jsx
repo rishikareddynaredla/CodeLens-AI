@@ -44,13 +44,15 @@ export function Overview() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {repo.topics.map(topic => (
-          <span key={topic} className="px-3 py-1 rounded-full border border-border bg-transparent text-sm text-secondary-text">
-            {topic}
-          </span>
-        ))}
-      </div>
+      {repo.topics && repo.topics.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {repo.topics.map(topic => (
+            <span key={topic} className="px-3 py-1 rounded-full border border-border bg-transparent text-sm text-secondary-text">
+              {topic}
+            </span>
+          ))}
+        </div>
+      )}
 
       <Card className="mt-12 bg-white">
         <CardHeader>

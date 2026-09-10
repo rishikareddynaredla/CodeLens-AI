@@ -4,6 +4,9 @@ node_modules/
 # environment variables
 .env
 
+# local settings (may contain API keys)
+backend/config.json
+
 # logs
 logs
 *.log

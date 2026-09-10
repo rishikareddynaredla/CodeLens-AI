@@ -1,14 +1,36 @@
 const OpenAI = require("openai");
+const config = require("./configService");
 
-const client = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY,
-});
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+
+// Client is created lazily so a key entered via the Settings page takes
+// effect immediately (the client is recreated whenever the key changes).
+let client = null;
+
+const getClient = () => {
+  const apiKey = config.getEffectiveOpenRouterKey();
+  if (!apiKey) return null;
+  if (client && client._apiKey === apiKey) return client;
+  client = new OpenAI({
+    baseURL: OPENROUTER_BASE_URL,
+    apiKey,
+    timeout: 30000,
+  });
+  client._apiKey = apiKey;
+  return client;
+};
+
+const getModel = () => config.getConfig().model;
+
+const NO_KEY_MESSAGE =
+  "AI is not configured. Add an OpenRouter API key in Settings.";
 
 const summarizeReadme = async (readmeContent) => {
+  const client = getClient();
+  if (!client) return NO_KEY_MESSAGE;
   try {
     const response = await client.chat.completions.create({
-      model: "deepseek/deepseek-chat",
+      model: getModel(),
 
       messages: [
         {
@@ -50,9 +72,11 @@ Keep answer short, clear, and beginner-friendly.
 };
 
 const explainArchitecture = async (folders) => {
+  const client = getClient();
+  if (!client) return NO_KEY_MESSAGE;
   try {
     const response = await client.chat.completions.create({
-      model: "deepseek/deepseek-chat",
+      model: getModel(),
 
       messages: [
         {
@@ -86,9 +110,11 @@ Keep explanation concise.
   }
 };
 const identifyImportantFiles = async (files) => {
+  const client = getClient();
+  if (!client) return [];
   try {
     const response = await client.chat.completions.create({
-      model: "deepseek/deepseek-chat",
+      model: getModel(),
 
       messages: [
         {
@@ -117,7 +143,7 @@ Example:
 
 [
   "package.json",
-  "index.js",s
+  "index.js",
   "README.md"
 ]
 
@@ -139,22 +165,36 @@ Do not include markdown.
       .replace(/```/g, "")
       .trim();
 
-    return JSON.parse(cleanedContent);
+    const parsed = JSON.parse(cleanedContent);
+
+    // Guard against the AI model returning an object instead of an array,
+    // or returning values that are not strings (e.g. null).
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.filter(
+      (item) => typeof item === "string"
+    );
 
   } catch (error) {
-    console.error(error);
+    console.error("Failed to identify important files:", error.message);
 
-    return "Failed to identify important files";
+    // Return an empty array on any failure so callers can safely loop
+    // over the result without encountering a string or throwing.
+    return [];
   }
 };
   const summarizeFile = async (
   fileName,
   fileContent
 ) => {
+  const client = getClient();
+  if (!client) return NO_KEY_MESSAGE;
   try {
     const response =
       await client.chat.completions.create({
-        model: "deepseek/deepseek-chat",
+        model: getModel(),
 
         messages: [
           {
@@ -198,10 +238,12 @@ const answerQuestion = async (
   knowledgeBase,
   question
 ) => {
+  const client = getClient();
+  if (!client) return NO_KEY_MESSAGE;
   try {
     const response =
       await client.chat.completions.create({
-        model: "deepseek/deepseek-chat",
+        model: getModel(),
 
         messages: [
           {

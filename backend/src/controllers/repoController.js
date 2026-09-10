@@ -13,7 +13,41 @@ const {
 } = require("../services/aiService");
 const { getRepoContents,
   getFileContent,
+  getRepoTree,
  } = require("../services/githubService");
+const { getDependencies } = require("../services/dependencyService");
+const appConfig = require("../services/configService");
+
+// Extract owner/repo from any GitHub URL form (https://.../owner/repo,
+// git@...:owner/repo.git, trailing slashes, #fragments, /tree/main, etc).
+// Returns null when the URL is not a recognizable GitHub repository URL.
+const parseRepoUrl = (repoUrl) => {
+  if (typeof repoUrl !== "string") return null;
+  const match = repoUrl.match(/github\.com[/:]([^/]+)\/([^/#?]+)/i);
+  if (!match) return null;
+  return {
+    owner: match[1],
+    repo: match[2].replace(/\.git$/, ""),
+  };
+};
+
+// Map GitHub API errors to sensible HTTP status codes instead of always 500.
+const githubStatus = (error, fallback = 500) =>
+  error.response && error.response.status === 404 ? 404 : fallback;
+
+// Build GitHub API headers with an optional auth token to avoid rate limits.
+// Returns plain headers when no token is configured.
+const githubHeaders = () => {
+  const headers = {
+    Accept: "application/vnd.github+json",
+  };
+  const token = appConfig.getEffectiveGithubToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+};
+
 // GET /api/repo/:owner/:repo
 const getRepository = async (req, res) => {
   try {
@@ -21,7 +55,11 @@ const getRepository = async (req, res) => {
 
     // Fetch repository data
     const response = await axios.get(
-      `https://api.github.com/repos/${owner}/${repo}`
+      `https://api.github.com/repos/${owner}/${repo}`,
+      {
+        timeout: 15000,
+        headers: githubHeaders(),
+      }
     );
 
     const repoData = response.data;
@@ -30,7 +68,9 @@ const getRepository = async (req, res) => {
     const readmeResponse = await axios.get(
       `https://api.github.com/repos/${owner}/${repo}/readme`,
       {
+        timeout: 15000,
         headers: {
+          ...githubHeaders(),
           Accept: "application/vnd.github.v3.raw",
         },
       }
@@ -47,13 +87,19 @@ const getRepository = async (req, res) => {
       forks: repoData.forks_count,
       language: repoData.language,
       url: repoData.html_url,
+      updatedAt: repoData.updated_at,
+      topics: Array.isArray(repoData.topics) ? repoData.topics : [],
       summary,
       //readme: readmeContent,
     });
 
   } catch (error) {
-    res.status(500).json({
-      message: "Failed to fetch repository",
+    const status = githubStatus(error);
+    res.status(status).json({
+      message:
+        status === 404
+          ? "Repository not found, renamed, or made private"
+          : "Failed to fetch repository",
       error: error.message,
     });
   }
@@ -71,19 +117,52 @@ const analyzeRepository = async (req, res) => {
       });
     }
 
-    // Extract owner and repo from GitHub URL
-    const parts = repoUrl.split("/");
-
-    const owner = parts[3];
-    const repo = parts[4];
+    // Extract owner and repo from GitHub URL, rejecting malformed input early
+    // with a client error instead of forwarding garbage to the GitHub API.
+    const parsed = parseRepoUrl(repoUrl);
+    if (!parsed) {
+      return res.status(400).json({
+        message: "Invalid GitHub repository URL. Expected format: https://github.com/owner/repo",
+      });
+    }
+    const { owner, repo } = parsed;
 
     // Fetch repository data
     const response = await axios.get(
-      `https://api.github.com/repos/${owner}/${repo}`
+      `https://api.github.com/repos/${owner}/${repo}`,
+      {
+        timeout: 15000,
+        headers: githubHeaders(),
+      }
     );
 
     const repoData = response.data;
     const contents = await getRepoContents(owner, repo);
+
+    // Full recursive file tree (single git trees API call). Capped to keep
+    // responses reasonable on very large repositories.
+    let tree = [];
+    try {
+      const fullTree = await getRepoTree(
+        owner,
+        repo,
+        repoData.default_branch || "main"
+      );
+      tree = fullTree
+        .filter(
+          (item) =>
+            item.path &&
+            !item.path.includes(".git/")
+        )
+        .map((item) => ({
+          path: item.path,
+          type: item.type === "tree" ? "dir" : "file",
+        }))
+        .slice(0, 500);
+    } catch (error) {
+      console.log("Tree fetch failed:", error.message);
+    }
+
     const folders = contents
   .filter((item) => item.type === "dir")
   .map((item) => item.name);
@@ -93,44 +172,69 @@ const analyzeRepository = async (req, res) => {
   console.log("FILES FROM GITHUB:");
   console.log(files);
 
-  const importantFiles = await identifyImportantFiles(files);
+  const config = appConfig.getConfig();
+  const importantFiles = [];
   const fileSummaries = [];
 
-console.log("Important Files:");
-console.log(importantFiles);
+  if (config.summariesEnabled) {
+    const identified = await identifyImportantFiles(files);
+    console.log("Important Files:");
+    console.log(identified);
 
-for (const file of importantFiles) {
-  try {
-    console.log("Trying to fetch:", file);
-    const fileContent = await getFileContent(
-      owner,
-      repo,
-      file
+    // Guard: importantFiles should always be an array returned by the AI service.
+    // If it is not (e.g. AI failure), avoid iterating over a string/falsy value.
+    const filesToSummarize = Array.isArray(identified)
+      ? identified
+      : [];
+
+    // Fetch and summarize the important files in PARALLEL to avoid sequential
+    // blocking on slow file fetches + AI calls, which caused request timeouts.
+    const results = await Promise.allSettled(
+      filesToSummarize.map(async (file) => {
+        console.log("Trying to fetch:", file);
+        const fileContent = await getFileContent(owner, repo, file);
+        const summary = await summarizeFile(file, fileContent);
+        return { file, summary };
+      })
     );
 
-    const summary = await summarizeFile(
-      file,
-      fileContent
-    );
-
-    fileSummaries.push({
-      file,
-      summary,
-    });
-
-  } catch (error) {
-    console.log(`Skipping ${file}`);
-    console.log(error.message);
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        fileSummaries.push(result.value);
+      } else {
+        console.log("Skipping file (failed):", result.reason?.message || "unknown error");
+      }
+    }
+    importantFiles.push(...filesToSummarize);
+  } else {
+    console.log("File summaries disabled in settings");
   }
-}
 
     const architecture = await explainArchitecture(folders);
+
+    // Fetch real dependencies from the repository's manifest files
+    let dependencies = [];
+    let manifests = [];
+    let packageManager = null;
+    let devScript = null;
+    if (config.depsEnabled) {
+      const deps = await getDependencies(owner, repo);
+      dependencies = deps.dependencies || [];
+      manifests = deps.manifests || [];
+      packageManager = deps.packageManager || null;
+      devScript = deps.devScript || null;
+      console.log("Dependencies found:", dependencies.length);
+    } else {
+      console.log("Dependency analysis disabled in settings");
+    }
 
     // Fetch README
     const readmeResponse = await axios.get(
       `https://api.github.com/repos/${owner}/${repo}/readme`,
       {
+        timeout: 15000,
         headers: {
+          ...githubHeaders(),
           Accept: "application/vnd.github.v3.raw",
         },
       }
@@ -147,6 +251,14 @@ for (const file of importantFiles) {
 
     FOLDERS:
     ${folders.join(", ")}
+
+    DEPENDENCIES:
+    ${dependencies
+      .map(
+        (dep) =>
+          `${dep.name}@${dep.version} (${dep.type})`
+      )
+      .join(", ") || "No dependencies detected"}
 
     FILE SUMMARIES:
     ${fileSummaries
@@ -172,17 +284,28 @@ for (const file of importantFiles) {
     forks: repoData.forks_count,
     language: repoData.language,
     url: repoData.html_url,
+    updatedAt: repoData.updated_at,
+    topics: Array.isArray(repoData.topics) ? repoData.topics : [],
     summary,
     folders,
     files,
+    tree,
     importantFiles,
     architecture,
-    fileSummaries
+    fileSummaries,
+    dependencies,
+    manifests,
+    packageManager,
+    devScript
 });
 
   } catch (error) {
-    res.status(500).json({
-      message: "Failed to analyze repository",
+    const status = githubStatus(error);
+    res.status(status).json({
+      message:
+        status === 404
+          ? "Repository not found, renamed, or made private"
+          : "Failed to analyze repository",
       error: error.message,
     });
   }
